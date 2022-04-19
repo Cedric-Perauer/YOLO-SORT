@@ -1,0 +1,8 @@
+*.txt
+*.log
+*.swp
+__pycache__
+*.DS_STORE
+*.pt
+*.pth
+*.mlmodel

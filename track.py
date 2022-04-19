@@ -19,11 +19,7 @@ from __future__ import print_function
 
 import os
 import numpy as np
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from skimage import io
+
 
 import glob
 import time
@@ -54,6 +50,11 @@ from yolov5.utils.augmentations import Albumentations, augment_hsv, copy_paste, 
 import numpy as np 
 
 np.random.seed(0)
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from skimage import io
 
 
 
@@ -71,7 +72,7 @@ def load_source(path,img_sz=640,stride=32):
     return img
 
 
-def model_load(weights,device,data,dnn=False,half=False,bs=1,img_sz=640):
+def model_load(weights,device,data,dnn=False,half=False,bs=1,img_sz=320):
     # Load model
     device = select_device(device)
     model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data, fp16=half)
@@ -88,7 +89,7 @@ def run(
         weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
         data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
-        imgsz=(640, 640),  # inference size (height, width)
+        imgsz=(320, 320),  # inference size (height, width)
         conf_thres=0.25,  # confidence threshold
         iou_thres=0.45,  # NMS IOU threshold
         max_det=1000,  # maximum detections per image
@@ -118,7 +119,7 @@ def run(
     # Run inference
     dt = [0.0, 0.0, 0.0]
 
-    im = load_source(path)
+    im = load_source(path,img_sz=imgsz[0])
     im0 = im.copy()
     t1 = time_sync()
     im = torch.from_numpy(im)
@@ -137,11 +138,10 @@ def run(
     # NMS
     pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
     dt[2] += time_sync() - t3
-    for i, det in enumerate(pred):
-        if len(det):
-                # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(im.shape[2:], det[:, :4], im0.shape).round() 
-    return det
+    
+    
+    print('runtime',(dt[1] + dt[2]) * 1000, ' ms')
+    return pred 
 
 def linear_assignment(cost_matrix):
   try:
@@ -305,7 +305,19 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.3):
 
   return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
+def vis(path,dets):
+	img = cv2.imread(path)
 
+	#dets = list(dets.numpy())
+	for det in dets[0] : 
+		x1, y1, x2, y2,conf,clss = det[0],det[1],det[2],det[3],det[4],det[5]
+		start_point = (int(x1),int(y1))
+		end_point = (int(x2),int(y2))
+		color = (255,0,0)
+		img = cv2.rectangle(img,start_point,end_point,color,2)
+	return img 
+
+	
 
 class Sort(object):
   def __init__(self, max_age=1, min_hits=3, iou_threshold=0.3):
@@ -414,7 +426,7 @@ if __name__ == '__main__':
   display = args.display
   phase = args.phase
   # Load model
-  model = model_load(args.weights,args.device,args.data)
+  model = model_load(args.weights,args.device,args.data,img_sz=args.imgsz)
   total_time = 0.0
   total_frames = 0
   colours = np.random.rand(32, 3) #used only for display
@@ -436,54 +448,53 @@ if __name__ == '__main__':
                        iou_threshold=args.iou_threshold) #create instance of the SORT tracker
 
   files = os.listdir(args.seq_path)
-  
- 
-  #for seq_dets_fn in glob.glob(pattern):
-  #  seq_dets = np.loadtxt(seq_dets_fn, delimiter=',')
-  #  seq = seq_dets_fn[pattern.find('*'):].split(os.path.sep)[0]
-  #  print(len(seq_dets)) 
+  files.sort()
+  frame = 0 
+  out_file = open('output.txt','w')
+  print(display)
+  if display : 
+    print('plot')
+    plt.ion()
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111, aspect='equal')
   for i in range(len(files)):
-	  total_frames += 1 
 	  f_path = args.seq_path + files[i]
-	  out = run(model,path=f_path)
+	  out = run(model,path=f_path,imgsz=(args.imgsz,args.imgsz))
+	  out = out[0][:,:-1].numpy()
+	  #for i,o in enumerate(out) : 
+	  #	  pred.append(np.asarray(o))
+	  #print(pred)
+	  
+	  
+	  #img = vis(f_path,out)
+	  #cv2.imshow('img',img)
+	  #cv2.waitKey(0)
+	  
+	  if(display):
+		  fn = f_path
+		  print(fn)
+		  im =io.imread(fn)
+		  ax1.imshow(im)
+		  plt.title('Eth Bahnhof ' + ' Tracked Targets')
+	  
+	  start_time = time.time()
+	  trackers = mot_tracker.update(out)
+	  cycle_time = time.time() - start_time
+	  total_time += cycle_time
+	  
 
+	  for d in trackers:
+		  print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1'%(frame,d[4],d[0],d[1],d[2]-d[0],d[3]-d[1]),file=out_file)
+		  if(display):
+			  d = d.astype(np.int32)
+			  ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
+		  
+		  if(display):
+			  fig.canvas.flush_events()
+			  plt.draw()
+			  ax1.cla()
+	  frame += 1
+  print("Total Tracking took: %.3f seconds for %d frames or %.1f FPS" % (total_time, total_frames, total_frames / total_time))
 
-  '''  
-    with open(os.path.join('output', '%s.txt'%(seq)),'w') as out_file:
-      print("Processing %s."%(seq))
-      for frame in range(int(seq_dets[:,0].max())):
-        frame += 1 #detection and frame numbers begin at 1
-        dets = seq_dets[seq_dets[:, 0]==frame, 2:7]
-        print('dets',dets)
-        #dets = get_dets(frame_name)
-        dets[:, 2:4] += dets[:, 0:2] #convert to [x1,y1,w,h] to [x1,y1,x2,y2]
-        total_frames += 1
-
-        if(display):
-          fn = os.path.join('mot_benchmark', phase, seq, 'img1', '%06d.jpg'%(frame))
-          im =io.imread(fn)
-          ax1.imshow(im)
-          plt.title(seq + ' Tracked Targets')
-
-        start_time = time.time()
-        trackers = mot_tracker.update(dets)
-        cycle_time = time.time() - start_time
-        total_time += cycle_time
-
-        for d in trackers:
-          print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1'%(frame,d[4],d[0],d[1],d[2]-d[0],d[3]-d[1]),file=out_file)
-          if(display):
-            d = d.astype(np.int32)
-            ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
-
-        if(display):
-          fig.canvas.flush_events()
-          plt.draw()
-          ax1.cla()
-  '''
-
-  
-  #print("Total Tracking took: %.3f seconds for %d frames or %.1f FPS" % (total_time, total_frames, total_frames / total_time))
-
-  #if(display):
-  #  print("Note: to get real runtime results run without the option: --display")
+if(display):
+	  print("Note: to get real runtime results run without the option: --display")
