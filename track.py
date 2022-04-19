@@ -141,7 +141,7 @@ def run(
     
     
     print('runtime',(dt[1] + dt[2]) * 1000, ' ms')
-    return pred 
+    return pred, (dt[1] + dt[2]) * 1000
 
 def linear_assignment(cost_matrix):
   try:
@@ -428,6 +428,8 @@ if __name__ == '__main__':
   # Load model
   model = model_load(args.weights,args.device,args.data,img_sz=args.imgsz)
   total_time = 0.0
+  max_t = 0.
+  track_det_time = 0.
   total_frames = 0
   colours = np.random.rand(32, 3) #used only for display
   if(display):
@@ -458,8 +460,9 @@ if __name__ == '__main__':
     fig = plt.figure()
     ax1 = fig.add_subplot(111, aspect='equal')
   for i in range(len(files)):
+	  print('Frame Number ',str(frame) + '/',str(len(files)))
 	  f_path = args.seq_path + files[i]
-	  out = run(model,path=f_path,imgsz=(args.imgsz,args.imgsz))
+	  out, det_time = run(model,path=f_path,imgsz=(args.imgsz,args.imgsz))
 	  out = out[0][:,:-1].numpy()
 	  #for i,o in enumerate(out) : 
 	  #	  pred.append(np.asarray(o))
@@ -479,22 +482,34 @@ if __name__ == '__main__':
 	  
 	  start_time = time.time()
 	  trackers = mot_tracker.update(out)
+	  end = time.time()
 	  cycle_time = time.time() - start_time
 	  total_time += cycle_time
-	  
+	  total = (end - start_time) * 1000 + det_time
+	  print('Total took ', total, ' ms')
+	  track_det_time += total
+	  max_t = max(max_t,total)
+	  print('Current Max ',max_t)
 
+	  if display : 
+		  im = cv2.imread(f_path)
+	            
 	  for d in trackers:
-		  print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1'%(frame,d[4],d[0],d[1],d[2]-d[0],d[3]-d[1]),file=out_file)
-		  if(display):
+		  if display : 
 			  d = d.astype(np.int32)
-			  ax1.add_patch(patches.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],fill=False,lw=3,ec=colours[d[4]%32,:]))
-		  
-		  if(display):
-			  fig.canvas.flush_events()
-			  plt.draw()
-			  ax1.cla()
-	  frame += 1
-  print("Total Tracking took: %.3f seconds for %d frames or %.1f FPS" % (total_time, total_frames, total_frames / total_time))
+			  start_point = (d[0],d[1])
+			  end_point = (d[2],d[3])
+			  color = colours[d[4]%32,:] * 255
+			  print(color)
+			  #cv2.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],color=colours[d[4]%32,:])
+			  im = cv2.rectangle(im,start_point,end_point,color,2)
+	  cv2.imshow('tracking',im)
+	  cv2.waitKey(0)
 
+	  frame += 1
+	  total_frames += 1 
+  print("Tracking Only took: %.3f seconds for %d frames or %.1f FPS" % (total_time, total_frames, total_frames / total_time))
+  print("Tracking + Detection took: %.3f seconds for %d frames or %.1f FPS" % ((track_det_time)/1000., total_frames, total_frames / float(track_det_time/1000.)))
+  print("Max runtime was ", max_t,' ms')
 if(display):
 	  print("Note: to get real runtime results run without the option: --display")
