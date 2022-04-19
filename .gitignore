@@ -1,8 +1,12 @@
 *.txt
 *.log
+*.jpg
+*.png
+runs/
 *.swp
 __pycache__
 *.DS_STORE
+*.DS_Store
 *.pt
 *.pth
 *.mlmodel
