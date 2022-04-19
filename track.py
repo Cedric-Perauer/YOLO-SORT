@@ -83,6 +83,8 @@ def model_load(weights,device,data,dnn=False,half=False,bs=1,img_sz=640):
 
 @torch.no_grad()
 def run(
+	model,
+	path,
         weights=ROOT / 'yolov5s.pt',  # model.pt path(s)
         source=ROOT / 'data/images',  # file/dir/URL/glob, 0 for webcam
         data=ROOT / 'data/coco128.yaml',  # dataset.yaml path
@@ -110,12 +112,8 @@ def run(
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
 ):
-    source = str(source)
-    path = source + '/bus.jpg'
-
-    print(path)
-    # Load model
-    model = model_load(weights,device,data)
+    
+    
 
     # Run inference
     dt = [0.0, 0.0, 0.0]
@@ -370,7 +368,7 @@ def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='SORT demo')
     parser.add_argument('--display', dest='display', help='Display online tracker output (slow) [False]',action='store_true')
-    parser.add_argument("--seq_path", help="Path to detections.", type=str, default='/Users/cedric/Codes/YOLO-SORT/sort/data')
+    parser.add_argument("--seq_path", help="Path to detections.", type=str, default='/Users/cedric/Codes/YOLO-SORT/mot_benchmark/train/ETH-Bahnhof/img1/')
     parser.add_argument("--phase", help="Subdirectory in seq_path.", type=str, default='train')
     parser.add_argument("--max_age", 
                         help="Maximum number of frames to keep alive a track without associated detections.", 
@@ -381,7 +379,7 @@ def parse_args():
     parser.add_argument("--iou_threshold", help="Minimum IOU for match.", type=float, default=0.3)
     parser.add_argument('--weights', nargs='+', type=str, default=ROOT / 'yolov5s.pt', help='model path(s)')
     parser.add_argument('--source', type=str, default=ROOT / 'data/images', help='file/dir/URL/glob, 0 for webcam')
-    parser.add_argument('--data', type=str, default=ROOT / 'data/coco128.yaml', help='(optional) dataset.yaml path')
+    parser.add_argument('--data', type=str, default=ROOT / 'yolov5/data/coco128.yaml', help='(optional) dataset.yaml path')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='NMS IoU threshold')
@@ -411,9 +409,12 @@ def parse_args():
 
 if __name__ == '__main__':
   # all train
+  # Load model
   args = parse_args()
   display = args.display
   phase = args.phase
+  # Load model
+  model = model_load(args.weights,args.device,args.data)
   total_time = 0.0
   total_frames = 0
   colours = np.random.rand(32, 3) #used only for display
@@ -428,15 +429,26 @@ if __name__ == '__main__':
   if not os.path.exists('output'):
     os.makedirs('output')
  
-  pattern = os.path.join(args.seq_path, phase, '*', 'det', 'det.txt')
-  for seq_dets_fn in glob.glob(pattern):
-    mot_tracker = Sort(max_age=args.max_age, 
+
+  #init tracker 
+  mot_tracker = Sort(max_age=args.max_age, 
                        min_hits=args.min_hits,
                        iou_threshold=args.iou_threshold) #create instance of the SORT tracker
-    seq_dets = np.loadtxt(seq_dets_fn, delimiter=',')
-    seq = seq_dets_fn[pattern.find('*'):].split(os.path.sep)[0]
-    print(len(seq_dets)) 
-    
+
+  files = os.listdir(args.seq_path)
+  
+ 
+  #for seq_dets_fn in glob.glob(pattern):
+  #  seq_dets = np.loadtxt(seq_dets_fn, delimiter=',')
+  #  seq = seq_dets_fn[pattern.find('*'):].split(os.path.sep)[0]
+  #  print(len(seq_dets)) 
+  for i in range(len(files)):
+	  total_frames += 1 
+	  f_path = args.seq_path + files[i]
+	  out = run(model,path=f_path)
+
+
+  '''  
     with open(os.path.join('output', '%s.txt'%(seq)),'w') as out_file:
       print("Processing %s."%(seq))
       for frame in range(int(seq_dets[:,0].max())):
@@ -468,8 +480,10 @@ if __name__ == '__main__':
           fig.canvas.flush_events()
           plt.draw()
           ax1.cla()
+  '''
 
-  print("Total Tracking took: %.3f seconds for %d frames or %.1f FPS" % (total_time, total_frames, total_frames / total_time))
+  
+  #print("Total Tracking took: %.3f seconds for %d frames or %.1f FPS" % (total_time, total_frames, total_frames / total_time))
 
-  if(display):
-    print("Note: to get real runtime results run without the option: --display")
+  #if(display):
+  #  print("Note: to get real runtime results run without the option: --display")
