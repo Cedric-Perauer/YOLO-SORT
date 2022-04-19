@@ -464,10 +464,6 @@ if __name__ == '__main__':
 	  f_path = args.seq_path + files[i]
 	  out, det_time = run(model,path=f_path,imgsz=(args.imgsz,args.imgsz))
 	  out = out[0][:,:-1].numpy()
-	  #for i,o in enumerate(out) : 
-	  #	  pred.append(np.asarray(o))
-	  #print(pred)
-	  
 	  
 	  #img = vis(f_path,out)
 	  #cv2.imshow('img',img)
@@ -503,8 +499,9 @@ if __name__ == '__main__':
 			  print(color)
 			  #cv2.Rectangle((d[0],d[1]),d[2]-d[0],d[3]-d[1],color=colours[d[4]%32,:])
 			  im = cv2.rectangle(im,start_point,end_point,color,2)
-	  cv2.imshow('tracking',im)
-	  cv2.waitKey(0)
+	  if display : 
+		  cv2.imshow('tracking',im)
+		  cv2.waitKey(0)
 
 	  frame += 1
 	  total_frames += 1 
